@@ -23,14 +23,14 @@ class Runner
     return exit if input.match /exit/i
     return Runner.run if input.match /home/i
     while input.match /^help/i
-      caller.grep(/.*get_tickets.*/).empty? ? main_instructions : main_instructions(true)
+      main_instructions
       print "\n>> "
       input = STDIN.gets.chomp.strip.downcase
     end
     input
   end
 
-  def main_instructions(flag = false)
+  def main_instructions
     puts "Main..."
     puts "\n\tEnter "+"help".colorize(:green)
     puts "\n\tEnter "+"exit".colorize(:green)+" to exit the app"
@@ -40,10 +40,8 @@ class Runner
     puts "\n\tEnter "+"search -t <theater name>".colorize(:green)
     puts "\n\tEnter "+"search -m".colorize(:green)+" to list movies"
     puts "\n\tEnter "+"search -t".colorize(:green)+" to list theaters"
-    if flag
-      puts "\nMovie and Theater selected...."
-      puts "\n\tEnter "+"trailer".colorize(:green)+", "+"imdb".colorize(:green)+", or "+"purchase <(hh:mm)>".colorize(:green)+" enter 'pm' if shown.'\n"
-    end
+    puts "\nMovie and Theater selected...."
+    puts "\n\tEnter "+"trailer".colorize(:green)+", "+"imdb".colorize(:green)+", or "+"purchase <(hh:mm)>".colorize(:green)+" enter 'pm' if shown.'\n"
   end
 
   def main_commands(input)
@@ -72,7 +70,7 @@ class Runner
   def search(user_input, model)
     list = model.find_all_by_name(user_input)
     unless list.empty?
-      list.each_with_index{ |item, index| puts "#{index+1}.   #{item.name}" }
+      list.each{ |item| puts "#{model.all.index(item)+1}.   #{item.name}" }
       puts ''
     end
     list.empty? ? nil : list
@@ -83,7 +81,7 @@ class Runner
     theater = select_from(theaters)
     movies = theater.get_movies_showing
     theater.list_showtimes(movies)
-    movie = select_from(theater.movies)
+    movie = select_from(movies)
     until movies.include? movie
       movie = select_from(theater.movies)
     end
@@ -95,7 +93,7 @@ class Runner
     movie = select_from(movies)
     theaters = movie.get_open_theaters
     movie.list_showtimes(theaters)
-    theater = select_from(movie.theaters)
+    theater = select_from(theaters)
     until theaters.include? theater 
       theater = select_from(movie.theaters)
     end
