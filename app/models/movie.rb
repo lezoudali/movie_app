@@ -40,10 +40,12 @@ class Movie
 
   def open_trailer
     system("open", trailer) #only mac, use launchy gem 
+    false
   end
 
   def open_imdb
     system("open", imdb)
+    false
   end
 
   def open_showtime(theater, search_time)
@@ -55,7 +57,7 @@ class Movie
     showtimes.keys
   end
 
-  def get_open_theaters
+  def get_options
     theaters.each_with_object([]) do |theater, theater_list|
       next if get_showtimes(theater).empty?
       theater_list << theater
@@ -63,9 +65,7 @@ class Movie
   end
 
   def get_showtimes(theater)
-    times = ""
-    showtimes[theater].each {|showtime| times += "#{showtime.time.colorize(:light_blue)}  "}
-    times.strip
+    showtimes[theater].map {|showtime| "#{showtime.time}"}
   end
 
   def list_showtimes(theaters)
@@ -73,7 +73,7 @@ class Movie
     puts "\t#{duration}\t#{genre}\t#{ratings}"
     puts "\n"
     theaters.each_with_index do |theater, index|
-      puts "\n#{index+1}.\t" + "#{theater.name}".colorize(:magenta) + "\n\t\t#{get_showtimes(theater).colorize(:light_blue)}\n\n" 
+      puts "\n#{index+1}.\t" + "#{theater.name}".colorize(:magenta) + "\n\t\t#{get_showtimes(theater).join(" ").colorize(:light_blue)}\n\n" 
     end
   end
 end

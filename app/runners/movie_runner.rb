@@ -1,36 +1,49 @@
 class Runner
-
   def initialize
     MovieScraper.load
+    run
   end
 
-  def self.run
-    runner = Runner.new 
-    puts "\nSearch by " + "movie(s) ".colorize(:yellow) + "or by " + "theater(s)".colorize(:yellow) + "..."
-    puts "\nEnter command or 'help' to get list of commands\n\n".colorize(:green)
-    user_input = runner.get_user_input
-    while runner.main_commands(user_input).nil?
-      puts "\nCommand or Search not found...".colorize(:red)
-      puts "Enter "+"'help'".colorize(:green)+" for instructions"
-      user_input = runner.get_user_input
-      exit if user_input.match /exit/i
-    end
+  def run 
+    search_list = prompt_search
+    return no_data_found if search_list.size.zero?
+    movie, theater = get_movie_theater(search_list)
+    get_tickets(movie, theater)
+  end
+
+  def prompt_search
+    puts "\nSearch by movie(s) " + "'search -m | search -m <movie name>' ".colorize(:yellow) + "or by theater(s)" + " search -t | search -t <theater name>".colorize(:yellow) + "..."
+    puts "\nEnter command or 'help' to get list of commands\n\n".colorize(:green) 
+    error_message = "Invalid Search Command...".colorize(:red)
+    input = get_user_input(error_message, *search_options)
+    run_command(input)
   end
   
-  def get_user_input
+  def get_user_input(error_message, *validation_list)
     print ">> "
-    input = STDIN.gets.chomp.strip.downcase
-    return exit if input.match /exit/i
-    return Runner.run if input.match /home/i
-    while input.match /^help/i
-      main_instructions
-      print "\n>> "
+    input = STDIN.gets.chomp.strip.downcase 
+    return input if validation_list.empty?
+    until match?(input, validation_list)
+      help?(input) ? instructions : puts(error_message)
+      print ">> "
       input = STDIN.gets.chomp.strip.downcase
     end
     input
   end
 
-  def main_instructions
+  def get_movie_theater(categories = all)
+    return no_data_found if categories.size.zero?
+    category = select_from(categories)
+    options = category.get_options
+    category.list_showtimes(options)
+    option = select_from(options)
+    until options.include? option
+      option = select_from(options)
+    end
+    [option,category].sort_by{|selection| selection.to_s}
+  end
+
+  def instructions
     puts "Main..."
     puts "\n\tEnter "+"help".colorize(:green)
     puts "\n\tEnter "+"exit".colorize(:green)+" to exit the app"
@@ -44,101 +57,124 @@ class Runner
     puts "\n\tEnter "+"trailer".colorize(:green)+", "+"imdb".colorize(:green)+", or "+"purchase <(hh:mm)>".colorize(:green)+" enter 'pm' if shown.'\n"
   end
 
-  def main_commands(input)
-    case input
-    when /^search -t .+/i
-      arg = input.gsub(/search -t\s*/, "")
-      theaters = self.search(arg, Theater)
-      theaters.nil? ? nil : search_by_theaters(theaters)
-    when /^search -m .+/i
-      arg = input.gsub(/search -m\s*/, "")
-      movies = self.search(arg, Movie)
-      movies.nil? ? nil : search_by_movies(movies)
-    when /^search -m$/i
-      search_by_movies Movie.list
-    when /^search -t$/i
-      search_by_theaters Theater.list 
-    when /home/i
-      Runner.run 
-    when /exit/i
+  def purchase_ticket(user_input, movie, theater)
+    times = movie.get_showtimes(theater)
+    time = retrieve_time(user_input)
+    if times.include? time
+      movie.open_showtime(theater, time)
+      puts "Goodbye and enjoying your movie...".colorize(:yellow)
       exit
     else
-      puts "\nI don't understand that command, check spelling".colorize(:red)
+      puts "Select time from above (including <pm|am> if shown)"
     end
   end
 
-  def search(user_input, model)
-    list = model.find_all_by_name(user_input)
-    unless list.empty?
-      list.each{ |item| puts "#{model.all.index(item)+1}.   #{item.name}" }
-      puts ''
+  def get_tickets(movie, theater)
+    puts "\n\tEnter "+"trailer".colorize(:green)+", "+"imdb".colorize(:green)+", or "+"purchase <(hh:mm)>".colorize(:green)+" enter 'pm' if shown.'\n\n"
+    puts "\n#{movie.name}".upcase.colorize(:cyan) + "\t " + "#{theater.name.upcase}".colorize(:magenta) + "\t #{movie.get_showtimes(theater).join(" ")}".colorize(:light_blue) + "\n\n"
+    error_message = "\n\tWrong command... \n".colorize(:red) + "Enter "+"trailer".colorize(:green)+", "+"imdb".colorize(:green)+", or "+"purchase <(hh:mm)>"
+    loop do 
+      user_input = get_user_input(error_message, *get_ticket_options)
+      break if run_command(user_input, movie, theater)
     end
-    list.empty? ? nil : list
+    exit
   end
 
-  def search_by_theaters(theaters = Theater.all)
-    return no_data_found if theaters.size.zero?
-    theater = select_from(theaters)
-    movies = theater.get_movies_showing
-    theater.list_showtimes(movies)
-    movie = select_from(movies)
-    until movies.include? movie
-      movie = select_from(theater.movies)
-    end
-    get_tickets(movie, theater)
+  def list_all_movies
+    Movie.list
   end
 
-  def search_by_movies(movies = Movie.all)
-    return no_data_found if movies.size.zero?
-    movie = select_from(movies)
-    theaters = movie.get_open_theaters
-    movie.list_showtimes(theaters)
-    theater = select_from(theaters)
-    until theaters.include? theater 
-      theater = select_from(movie.theaters)
+  def list_all_theaters
+    Theater.list 
+  end
+
+  private  
+  
+  def commands
+    {
+      search:
+              {
+                theater:        /^search -t .+/i,
+                movie:          /^search -m .+/i,
+                all_movies:     /^search -m$/i,
+                all_theaters:   /^search -t$/i,
+                home:           /home/i,
+                exit:           /exit/i
+              },
+      open: 
+              {
+                trailer:        /trailer/i,
+                imdb:           /imdb/i,
+                ticket_link:    /purchase\s+\d+:\d+/,
+                home:           /home/i,
+                exit:           /exit/i
+              }
+    }
+  end
+
+  def run_command(user_input, movie = nil, theater = nil)
+    case user_input
+      when commands[:search][:theater]       then search_from(Theater, user_input)
+      when commands[:search][:movie]         then search_from(Movie, user_input)
+      when commands[:search][:all_movies]    then list_all_movies
+      when commands[:search][:all_theaters]  then list_all_theaters
+      when commands[:open][:home]            then restart_app
+      when commands[:open][:exit]            then exit
+      when commands[:open][:trailer]         then movie.open_trailer
+      when commands[:open][:imdb]            then movie.open_imdb 
+      when commands[:open][:ticket_link]     then purchase_ticket(user_input, movie, theater) 
     end
-    get_tickets(movie, theater)
+  end
+
+  def select_from(models)
+    error_message = "\nPlease enter correct ID from list...\n".colorize(:red)
+    ids = get_ids(models.size)
+    user_input = get_user_input(error_message, *ids)
+    models.find{|model| models.index(model) == (user_input.to_i-1)}
+  end
+
+  def search_from(model, user_input)
+    query = get_search_query(user_input)
+    model.list model.find_all_by_name(query)
+  end
+
+  def get_search_query(input)
+    input.gsub(/search -(m|t)\s*/, "")
+  end
+
+  def search_options
+    commands[:search].values
+  end
+
+  def get_ticket_options
+    commands[:open].values
+  end
+
+  def help?(input)
+    input.match(/help/)
+  end
+
+  def match?(string, matchings)
+    matchings.any?{|matching| matching =~ string }
+  end
+
+
+  def restart_app
+    run
   end
 
   def no_data_found
     puts "Google did not find any movies/theaters in your area... please enter a new date and zipcode :( ...".colorize(:red)
-    Runner.run
+    restart_app
   end
 
-  def select_from(list)
-    user_input = selection_prompt.to_i
-    selection = list.each_with_index.find{|x, index| index+1 == user_input}
-    until selection
-      user_input = selection_prompt.to_i
-      selection = list.each_with_index.find{|x, index| index+1 == user_input}
-    end
-    selection.first
+  def get_ids(size)
+    (1..size).map{|id| Regexp.new(id.to_s)} << /exit/i << /home/i
   end
 
-  def selection_prompt
-    puts "\nPlease enter correct ID from list...\n".colorize(:red)
-    get_user_input
+  def retrieve_time(user_input)
+    user_input.gsub(/purchase\s+/, "")
   end
 
-  def get_tickets(movie, theater)
-    times = movie.showtimes[theater].map{|showtime| showtime.time}
-    puts "\n\tEnter "+"trailer".colorize(:green)+", "+"imdb".colorize(:green)+", or "+"purchase <(hh:mm)>".colorize(:green)+" enter 'pm' if shown.'\n\n"
-    puts "\n#{movie.name}".upcase.colorize(:cyan) + "\t " + "#{theater.name.upcase}".colorize(:magenta) + "\t #{movie.get_showtimes(theater)}".colorize(:light_blue) 
-    puts "\n\n"
-
-    loop do 
-      user_input = get_user_input
-      case user_input
-      when /trailer/i then movie.open_trailer 
-      when /imdb/i then movie.open_imdb 
-      when /purchase\s+\d+:\d+/
-        time = user_input.gsub(/purchase\s+/, "")
-        puts "Select time from above (including <pm> if last one)" unless times.include? time
-        movie.open_showtime(theater, time) if times.include? time
-      when /home/i then Runner.run
-      when /exit/i then exit
-      else puts "\nCommand not found..."
-      end
-    end
-  end
 end
+

@@ -1,5 +1,4 @@
 class MovieScraper
-
   @zipcode = ""; @day = "0"
 
   class << self
@@ -51,7 +50,7 @@ class MovieScraper
     while movie_day.nil?
       puts "\nEnter by " + "day ".colorize(:yellow) +"or " +"index ".colorize(:yellow) +"(up to 7 days)...\n"
       input = get_user_input
-      days.each_with_index {|day, index| movie_day = index.to_s if input.match /(#{day.strftime("%A")[0,2]}.*?|#{index+1})/i}
+      days.each_with_index {|day, index| movie_day = index.to_s if input[0,2].match /(#{day.strftime("%A")[0,2]}.*?|#{index+1})/i}
     end
     puts "\nYou selected #{days[movie_day.to_i].strftime("%A %d %Y").colorize(:green)}"
     movie_day
