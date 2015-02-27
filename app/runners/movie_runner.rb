@@ -5,26 +5,26 @@ class Runner
   end
 
   def run 
-    search_list = prompt_search
+    search_list = search_prompt
     return no_data_found if search_list.size.zero?
     movie, theater = get_movie_theater(search_list)
     get_tickets(movie, theater)
   end
 
-  def prompt_search
+  def search_prompt
     puts "\nSearch by movie(s) " + "'search -m | search -m <movie name>' ".colorize(:yellow) + "or by theater(s)" + " search -t | search -t <theater name>".colorize(:yellow) + "..."
     puts "\nEnter command or 'help' to get list of commands\n\n".colorize(:green) 
     error_message = "Invalid Search Command...".colorize(:red)
-    input = get_user_input(error_message, *search_options)
+    input = command_prompt(error_message, *search_options)
     run_command(input)
   end
   
-  def get_user_input(error_message, *validation_list)
+  def command_prompt(error_message, *validation_list)
     print ">> "
     input = STDIN.gets.chomp.strip.downcase 
     return input if validation_list.empty?
     until match?(input, validation_list)
-      help?(input) ? instructions : puts(error_message)
+      help?(input) ? show_instructions : puts(error_message)
       print ">> "
       input = STDIN.gets.chomp.strip.downcase
     end
@@ -33,17 +33,14 @@ class Runner
 
   def get_movie_theater(categories = all)
     return no_data_found if categories.size.zero?
-    category = select_from(categories)
+    category = selectin_prompt(categories)
     options = category.get_options
     category.list_showtimes(options)
-    option = select_from(options)
-    until options.include? option
-      option = select_from(options)
-    end
+    option = selectin_prompt(options)
     [option,category].sort_by{|selection| selection.to_s}
   end
 
-  def instructions
+  def show_instructions
     puts "Main..."
     puts "\n\tEnter "+"help".colorize(:green)
     puts "\n\tEnter "+"exit".colorize(:green)+" to exit the app"
@@ -74,7 +71,7 @@ class Runner
     puts "\n#{movie.name}".upcase.colorize(:cyan) + "\t " + "#{theater.name.upcase}".colorize(:magenta) + "\t #{movie.get_showtimes(theater).join(" ")}".colorize(:light_blue) + "\n\n"
     error_message = "\n\tWrong command... \n".colorize(:red) + "Enter "+"trailer".colorize(:green)+", "+"imdb".colorize(:green)+", or "+"purchase <(hh:mm)>"
     loop do 
-      user_input = get_user_input(error_message, *get_ticket_options)
+      user_input = command_prompt(error_message, *get_ticket_options)
       break if run_command(user_input, movie, theater)
     end
     exit
@@ -126,11 +123,11 @@ class Runner
     end
   end
 
-  def select_from(models)
+  def selectin_prompt(options)
     error_message = "\nPlease enter correct ID from list...\n".colorize(:red)
-    ids = get_ids(models.size)
-    user_input = get_user_input(error_message, *ids)
-    models.find{|model| models.index(model) == (user_input.to_i-1)}
+    ids = get_ids(options.size)
+    user_input = command_prompt(error_message, *ids)
+    options.find{|option| options.index(option) == (user_input.to_i-1)}
   end
 
   def search_from(model, user_input)
@@ -157,7 +154,6 @@ class Runner
   def match?(string, matchings)
     matchings.any?{|matching| matching =~ string }
   end
-
 
   def restart_app
     run
