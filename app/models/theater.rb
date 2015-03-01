@@ -52,7 +52,7 @@ class Theater
     puts "\t#{address}\t#{phone}"
     puts "\n"
     movies.each_with_index do |movie, index|
-      puts "\n#{index+1}\t#{movie.name.colorize(:cyan)}\n\t\t#{movie.get_showtimes(self).join(" ").colorize(:light_blue)}\n\n"
+      puts "\n#{index+1}.\t#{movie.name.colorize(:cyan)}\n\t\t#{movie.get_showtimes(self).join(" ").colorize(:light_blue)}\n\n"
     end
   end
 end

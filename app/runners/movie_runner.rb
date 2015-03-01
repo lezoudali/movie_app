@@ -1,4 +1,6 @@
 class Runner
+  include CommandPrompt
+
   def initialize
     MovieScraper.load
     run
@@ -12,31 +14,20 @@ class Runner
   end
 
   def search_prompt
-    puts "\nSearch by movie(s) " + "'search -m | search -m <movie name>' ".colorize(:yellow) + "or by theater(s)" + " search -t | search -t <theater name>".colorize(:yellow) + "..."
-    puts "\nEnter command or 'help' to get list of commands\n\n".colorize(:green) 
+    puts "\nSearch by movie(s) " + "'search -m | search -m <movie name>' ".colorize(:yellow) + "or by theater(s)" + " search -t | search -t <theater name>".colorize(:yellow) + "...\n\n"
     error_message = "Invalid Search Command...".colorize(:red)
-    input = command_prompt(error_message, *search_options)
-    run_command(input)
-  end
-  
-  def command_prompt(error_message, *validation_list)
-    print ">> "
-    input = STDIN.gets.chomp.strip.downcase 
-    return input if validation_list.empty?
-    until match?(input, validation_list)
-      help?(input) ? show_instructions : puts(error_message)
-      print ">> "
-      input = STDIN.gets.chomp.strip.downcase
+    command_prompt do |command| 
+      return run_command(command) if command.match Regexp.union(search_commands)
+      help?(command) ? show_instructions : puts(error_message)
     end
-    input
   end
 
-  def get_movie_theater(categories = all)
+  def get_movie_theater(categories)
     return no_data_found if categories.size.zero?
-    category = selectin_prompt(categories)
+    category = selection_prompt(categories)
     options = category.get_options
     category.list_showtimes(options)
-    option = selectin_prompt(options)
+    option = selection_prompt(options)
     [option,category].sort_by{|selection| selection.to_s}
   end
 
@@ -59,7 +50,7 @@ class Runner
     time = retrieve_time(user_input)
     if times.include? time
       movie.open_showtime(theater, time)
-      puts "Goodbye and enjoying your movie...".colorize(:yellow)
+      puts "Goodbye and enjoy your movie... :)\n".colorize(:yellow)
       exit
     else
       puts "Select time from above (including <pm|am> if shown)"
@@ -67,14 +58,15 @@ class Runner
   end
 
   def get_tickets(movie, theater)
-    puts "\n\tEnter "+"trailer".colorize(:green)+", "+"imdb".colorize(:green)+", or "+"purchase <(hh:mm)>".colorize(:green)+" enter 'pm' if shown.'\n\n"
+    puts "\n\tEnter "+"trailer".colorize(:green)+", "+"imdb".colorize(:green)+", or "+"purchase <(hh:mm)>".colorize(:green)+" enter 'pm/am' if shown.'\n"
     puts "\n#{movie.name}".upcase.colorize(:cyan) + "\t " + "#{theater.name.upcase}".colorize(:magenta) + "\t #{movie.get_showtimes(theater).join(" ")}".colorize(:light_blue) + "\n\n"
-    error_message = "\n\tWrong command... \n".colorize(:red) + "Enter "+"trailer".colorize(:green)+", "+"imdb".colorize(:green)+", or "+"purchase <(hh:mm)>"
+    error_message = "Enter "+"trailer".colorize(:green)+", "+"imdb".colorize(:green)+", or "+"purchase <(hh:mm)>".colorize(:green)+" enter 'pm/am' if shown.'\n\n"
     loop do 
-      user_input = command_prompt(error_message, *get_ticket_options)
-      break if run_command(user_input, movie, theater)
+      command_prompt do |command| 
+        command.match Regexp.union(get_ticket_options) ? run_command(command, movie, theater) : puts(error_message)
+        show_instructions if help?(command)
+      end
     end
-    exit
   end
 
   def list_all_movies
@@ -91,43 +83,46 @@ class Runner
     {
       search:
               {
-                theater:        /^search -t .+/i,
-                movie:          /^search -m .+/i,
-                all_movies:     /^search -m$/i,
-                all_theaters:   /^search -t$/i,
-                home:           /home/i,
-                exit:           /exit/i
+                theater:        /^search -?t .+/i,
+                movie:          /^search -?m .+/i,
+                all_movies:     /^search -?m$/i,
+                all_theaters:   /^search -?t$/i,
+                home:           /home/i
               },
       open: 
               {
                 trailer:        /trailer/i,
                 imdb:           /imdb/i,
                 ticket_link:    /purchase\s+\d+:\d+/,
-                home:           /home/i,
-                exit:           /exit/i
+                home:           /home/i
               }
     }
   end
 
-  def run_command(user_input, movie = nil, theater = nil)
-    case user_input
-      when commands[:search][:theater]       then search_from(Theater, user_input)
-      when commands[:search][:movie]         then search_from(Movie, user_input)
+  def run_command(command, movie = nil, theater = nil)
+    case command
+      when commands[:search][:theater]       then search_from(Theater, command)
+      when commands[:search][:movie]         then search_from(Movie, command)
       when commands[:search][:all_movies]    then list_all_movies
       when commands[:search][:all_theaters]  then list_all_theaters
       when commands[:open][:home]            then restart_app
-      when commands[:open][:exit]            then exit
       when commands[:open][:trailer]         then movie.open_trailer
       when commands[:open][:imdb]            then movie.open_imdb 
-      when commands[:open][:ticket_link]     then purchase_ticket(user_input, movie, theater) 
+      when commands[:open][:ticket_link]     then purchase_ticket(command, movie, theater) 
     end
   end
 
-  def selectin_prompt(options)
+  def find_selection(options, id)
+    options.find{|option| options.index(option) == id}
+  end
+
+  def selection_prompt(options)
     error_message = "\nPlease enter correct ID from list...\n".colorize(:red)
-    ids = get_ids(options.size)
-    user_input = command_prompt(error_message, *ids)
-    options.find{|option| options.index(option) == (user_input.to_i-1)}
+    ids = options.map.with_index{|opt, index| (index + 1).to_s}
+    command_prompt do |id|  
+      return find_selection(options, id.to_i - 1) if id.match Regexp.union(ids)
+      help?(command) ? show_instructions : puts(error_message)
+    end
   end
 
   def search_from(model, user_input)
@@ -136,10 +131,10 @@ class Runner
   end
 
   def get_search_query(input)
-    input.gsub(/search -(m|t)\s*/, "")
+    input.gsub(/search -?(m|t)\s*/, "")
   end
 
-  def search_options
+  def search_commands
     commands[:search].values
   end
 
@@ -151,10 +146,6 @@ class Runner
     input.match(/help/)
   end
 
-  def match?(string, matchings)
-    matchings.any?{|matching| matching =~ string }
-  end
-
   def restart_app
     run
   end
@@ -164,13 +155,8 @@ class Runner
     restart_app
   end
 
-  def get_ids(size)
-    (1..size).map{|id| Regexp.new(id.to_s)} << /exit/i << /home/i
-  end
-
   def retrieve_time(user_input)
     user_input.gsub(/purchase\s+/, "")
   end
-
 end
 
